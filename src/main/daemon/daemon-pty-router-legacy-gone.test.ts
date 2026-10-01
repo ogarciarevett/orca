@@ -7,7 +7,8 @@ function adapter(label: string, sessions: string[] = []): DaemonPtyAdapter {
     listProcesses: vi.fn(async () => sessions.map((id) => ({ id, cwd: '', title: label }))),
     disconnectOnly: vi.fn(async () => {}),
     onData: vi.fn(() => () => {}),
-    onExit: vi.fn(() => () => {})
+    onExit: vi.fn(() => () => {}),
+    onBackgroundStreamEvent: vi.fn(() => () => {})
   } as unknown as DaemonPtyAdapter
 }
 
@@ -33,6 +34,13 @@ describe('DaemonPtyRouter legacy socket that can never answer', () => {
     expect(missing.listProcesses).toHaveBeenCalledOnce()
     expect(refused.disconnectOnly).toHaveBeenCalledOnce()
     expect(router.getLegacyAdapters()).toEqual([])
+
+    await router.discoverLegacySessions()
+    router.onBackgroundStreamEvent(() => {})
+    expect(refused.listProcesses).toHaveBeenCalledOnce()
+    expect(missing.listProcesses).toHaveBeenCalledOnce()
+    expect(refused.onBackgroundStreamEvent).not.toHaveBeenCalled()
+    expect(current.onBackgroundStreamEvent).toHaveBeenCalledOnce()
   })
 
   it('still fails closed for the current daemon and for any other legacy error', async () => {

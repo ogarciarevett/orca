@@ -248,6 +248,10 @@ export class DaemonPtyRouter implements IPtyProvider {
           const index = this.legacy.indexOf(adapter)
           if (index !== -1) {
             this.legacy.splice(index, 1)
+            // Why: the resolver and fanout were built from a copy of allAdapters().
+            // Splicing this.legacy alone leaves them querying the dead socket.
+            this.ownerResolver.dropProvider(adapter)
+            this.subscriptions.dropAdapter(adapter)
           }
           // Why: the socket is already gone; a failed disconnect must not fail the list.
           void Promise.resolve()

@@ -8,12 +8,15 @@ export class DaemonPtyAdapterSubscriptionFanout {
   private dataListeners: ((payload: DaemonPtyRouterDataEvent) => void)[] = []
   private exitListeners: ((payload: DaemonPtyRouterExitEvent) => void)[] = []
 
+  private readonly adapters: DaemonPtyAdapter[]
+
   constructor(
-    private readonly adapters: readonly DaemonPtyAdapter[],
+    adapters: readonly DaemonPtyAdapter[],
     onAdapterExit: (id: string) => void,
     onAdapterIdentityChanged?: (adapter: DaemonPtyAdapter) => void
   ) {
-    for (const adapter of adapters) {
+    this.adapters = [...adapters]
+    for (const adapter of this.adapters) {
       this.unsubscribers.push(
         adapter.onData((payload) => {
           for (const listener of this.dataListeners) {
@@ -30,6 +33,13 @@ export class DaemonPtyAdapterSubscriptionFanout {
           ? [adapter.onDaemonIdentityChanged(() => onAdapterIdentityChanged(adapter))]
           : [])
       )
+    }
+  }
+
+  dropAdapter(adapter: DaemonPtyAdapter): void {
+    const index = this.adapters.indexOf(adapter)
+    if (index !== -1) {
+      this.adapters.splice(index, 1)
     }
   }
 
