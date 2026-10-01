@@ -5,6 +5,7 @@ import type { DaemonPtyRouterDataEvent, DaemonPtyRouterExitEvent } from './daemo
 
 export class DaemonPtyAdapterSubscriptionFanout {
   private unsubscribers: (() => void)[] = []
+  private readonly adapterUnsubscribers = new Map<DaemonPtyAdapter, (() => void)[]>()
   private dataListeners: ((payload: DaemonPtyRouterDataEvent) => void)[] = []
   private exitListeners: ((payload: DaemonPtyRouterExitEvent) => void)[] = []
 
@@ -17,7 +18,7 @@ export class DaemonPtyAdapterSubscriptionFanout {
   ) {
     this.adapters = [...adapters]
     for (const adapter of this.adapters) {
-      this.unsubscribers.push(
+      const unsubscribers = [
         adapter.onData((payload) => {
           for (const listener of this.dataListeners) {
             listener(payload)
@@ -32,7 +33,9 @@ export class DaemonPtyAdapterSubscriptionFanout {
         ...(onAdapterIdentityChanged && typeof adapter.onDaemonIdentityChanged === 'function'
           ? [adapter.onDaemonIdentityChanged(() => onAdapterIdentityChanged(adapter))]
           : [])
-      )
+      ]
+      this.adapterUnsubscribers.set(adapter, unsubscribers)
+      this.unsubscribers.push(...unsubscribers)
     }
   }
 
@@ -40,6 +43,18 @@ export class DaemonPtyAdapterSubscriptionFanout {
     const index = this.adapters.indexOf(adapter)
     if (index !== -1) {
       this.adapters.splice(index, 1)
+    }
+    const unsubscribers = this.adapterUnsubscribers.get(adapter)
+    if (!unsubscribers) {
+      return
+    }
+    this.adapterUnsubscribers.delete(adapter)
+    for (const unsubscribe of unsubscribers) {
+      unsubscribe()
+      const listed = this.unsubscribers.indexOf(unsubscribe)
+      if (listed !== -1) {
+        this.unsubscribers.splice(listed, 1)
+      }
     }
   }
 
