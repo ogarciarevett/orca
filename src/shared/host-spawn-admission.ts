@@ -175,9 +175,14 @@ export function decideSpawnAdmission(args: {
   }
   const negotiated = facts.declaredIntent !== null
   if (pressure === 'critical') {
-    // Why: an old caller clears its resume handle before spawning, so only critical
-    // pressure may refuse it, with the error it already treats as "reconnect".
-    return negotiated ? { kind: 'defer', reason: 'pressure' } : { kind: 'refuse_retryable' }
+    if (negotiated) {
+      return { kind: 'defer', reason: 'pressure' }
+    }
+    // Why: an old caller clears its resume handle before spawning, so it is refused only
+    // if the storm outlasts its whole admission window.
+    return now >= facts.deadlineAt
+      ? { kind: 'refuse_retryable' }
+      : { kind: 'wait', charge, retryAt: null }
   }
   if (negotiated && mode.kind === 'paused') {
     return { kind: 'defer', reason: 'paused' }

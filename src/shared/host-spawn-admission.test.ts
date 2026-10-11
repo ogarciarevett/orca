@@ -111,7 +111,14 @@ describe('decideSpawnAdmission', () => {
     expect(decide(state, negotiated, 0, 'ok', paused)).toEqual({ kind: 'defer', reason: 'paused' })
     expect(decide(state, facts(), 0, 'ok', paused).kind).toBe('admit')
     expect(decide(state, negotiated, 0, 'critical')).toEqual({ kind: 'defer', reason: 'pressure' })
-    expect(decide(state, facts(), 0, 'critical')).toEqual({ kind: 'refuse_retryable' })
+    expect(decide(state, facts({ deadlineAt: 500 }), 0, 'critical')).toEqual({
+      kind: 'wait',
+      charge: 'automatic',
+      retryAt: null
+    })
+    expect(decide(state, facts({ deadlineAt: 500 }), 500, 'critical')).toEqual({
+      kind: 'refuse_retryable'
+    })
 
     state.liveAutomatic = LIMITS.maxLiveAutomatic
     expect(decide(state, negotiated, 0)).toEqual({ kind: 'defer', reason: 'live_cap' })

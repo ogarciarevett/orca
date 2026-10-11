@@ -95,6 +95,17 @@ export class AutomaticWorkRunMarker {
     this.writeSync('running')
   }
 
+  /** Durably pauses automatic work until an explicit resume. */
+  pause(reason: 'pressure' | 'operator', now: number = Date.now()): void {
+    if (this.currentMode.kind === 'paused') {
+      return
+    }
+    this.currentMode = { kind: 'paused', reason, since: now }
+    if (this.opened) {
+      this.writeSync(this.armed ? 'running' : 'clean-exit')
+    }
+  }
+
   markCleanExit(): void {
     if (this.opened) {
       this.writeSync('clean-exit')

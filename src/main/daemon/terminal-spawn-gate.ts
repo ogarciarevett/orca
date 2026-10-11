@@ -20,6 +20,8 @@ import {
 
 export type TerminalSpawnAdmissionMode = 'observe' | 'enforce'
 
+const RECENT_AUTOMATIC_WORK_MS = 10 * 60_000
+
 export const TERMINAL_SPAWN_ADMISSION_ARG = '--spawn-admission'
 
 /** Reads the launcher's `--spawn-admission <mode>`; anything else observes. */
@@ -80,6 +82,7 @@ export class TerminalSpawnGate {
   private readonly liveAutomaticSessions = new Set<string>()
   private readonly waiters = new Set<() => void>()
   private waited = 0
+  private lastAutomaticAdmitAt: number | null = null
   private deferred = 0
   private refused = 0
 
@@ -149,6 +152,18 @@ export class TerminalSpawnGate {
     return { kind: 'wait', untilMs: Math.min(decision.retryAt ?? Infinity, facts.deadlineAt) }
   }
 
+  /** A pressure change can let a waiter through, or make it give up. */
+  onPressureChanged(): void {
+    this.wakeWaiters()
+  }
+
+  hasRecentAutomaticWork(now: number = this.now()): boolean {
+    return (
+      this.lastAutomaticAdmitAt !== null &&
+      now - this.lastAutomaticAdmitAt < RECENT_AUTOMATIC_WORK_MS
+    )
+  }
+
   onSessionExit(sessionId: string): void {
     if (this.liveAutomaticSessions.delete(sessionId)) {
       releaseLiveAutomatic(this.state)
@@ -171,6 +186,7 @@ export class TerminalSpawnGate {
   private lease(facts: SpawnRequestFacts, charge: SpawnCharge, now: number): TerminalSpawnLease {
     if (charge === 'automatic') {
       this.options.armAutomaticWork?.()
+      this.lastAutomaticAdmitAt = now
     }
     applySpawnAdmission(this.state, facts, charge, this.limits, now)
     let settled = false
