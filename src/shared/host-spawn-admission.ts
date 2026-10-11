@@ -101,9 +101,11 @@ export function resolveSpawnCharge(
   limits: SpawnAdmissionLimits,
   now: number
 ): SpawnCharge {
+  // Why a claim alone: a remote client's `--resume` arrives on a fresh terminal id with no
+  // history seed, so requiring one let every reconnect storm through. An old caller is only
+  // ever paced, so a user-started agent costs at most a short wait during a storm.
   const intent =
-    facts.declaredIntent ??
-    (facts.hasAgentSessionClaim && facts.hasHistorySeed ? 'automatic-restore' : 'interactive')
+    facts.declaredIntent ?? (facts.hasAgentSessionClaim ? 'automatic-restore' : 'interactive')
   if (intent === 'interactive') {
     return 'interactive'
   }

@@ -47,12 +47,11 @@ function mulberry32(seed: number): () => number {
 }
 
 describe('resolveSpawnCharge', () => {
-  it('infers automatic restore for an old caller only from a claim plus a history seed', () => {
+  it('infers automatic restore for an old caller from an agent claim, seeded or not', () => {
     const state = createSpawnAdmissionState(LIMITS, 0)
     expect(resolveSpawnCharge(state, facts(), LIMITS, 0)).toBe('automatic')
-    expect(resolveSpawnCharge(state, facts({ hasHistorySeed: false }), LIMITS, 0)).toBe(
-      'interactive'
-    )
+    // A remote client's resume: fresh terminal id, claim, no history seed.
+    expect(resolveSpawnCharge(state, facts({ hasHistorySeed: false }), LIMITS, 0)).toBe('automatic')
     expect(resolveSpawnCharge(state, facts({ hasAgentSessionClaim: false }), LIMITS, 0)).toBe(
       'interactive'
     )

@@ -90,6 +90,31 @@ describe('TerminalSpawnGate (observe-only)', () => {
     )
   })
 
+  it('counts a remote resume that arrives with a claim but no history seed', async () => {
+    await host.createOrAttach({
+      sessionId: 'remote-resume',
+      cols: 80,
+      rows: 24,
+      agentSessionEnsure: {
+        claim: {
+          digestVersion: 1 as const,
+          keyId: 'key',
+          identityDigest: 'r'.repeat(43),
+          worktreeScopeDigest: 'b'.repeat(43),
+          agent: 'codex' as const
+        },
+        surface: {
+          worktreeId: 'worktree',
+          tabId: 'tab-remote',
+          leafId: '11111111-1111-4111-8111-111111111111',
+          terminalHandle: 'term_remote'
+        }
+      },
+      streamClient: stream()
+    })
+    expect(gate.snapshot().liveAutomatic).toBe(1)
+  })
+
   it('never charges an attach and frees the live slot when the session exits', async () => {
     await restore('restore-a')
     await host.createOrAttach({
