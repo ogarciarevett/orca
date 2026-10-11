@@ -55,6 +55,7 @@ export class DaemonProcessGrowthMonitor {
   private readonly now: () => number
   private readonly readRows: () => Promise<ProcessRow[] | null>
   private currentLevel: HostPressureLevel = 'unknown'
+  private rising = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
 
@@ -107,6 +108,7 @@ export class DaemonProcessGrowthMonitor {
       },
       this.limits
     )
+    this.rising = verdict.rising
     const wasCritical = this.currentLevel === 'critical'
     this.setLevel(verdict.level)
     if (verdict.level === 'critical' && !wasCritical) {
@@ -129,21 +131,16 @@ export class DaemonProcessGrowthMonitor {
     if (this.stopped) {
       return
     }
-    // Why elevated samples fast: a rising tree is confirmed over several short samples,
-    // never tripped on one long idle interval.
+    // Why rising samples fast: a growing tree is confirmed over several short samples, never
+    // tripped on one long idle interval; a merely large tree keeps the slow cadence.
+    const confirming = this.rising || this.currentLevel === 'critical'
     const delayMs =
-      this.options.recentAutomaticWork() ||
-      this.currentLevel === 'elevated' ||
-      this.currentLevel === 'critical'
+      this.options.recentAutomaticWork() || confirming
         ? ACTIVE_SAMPLE_INTERVAL_MS
         : IDLE_SAMPLE_INTERVAL_MS
     this.timer = setTimeout(() => {
       this.timer = null
-      if (
-        !this.options.sampleWhenIdle &&
-        !this.options.recentAutomaticWork() &&
-        this.currentLevel !== 'elevated'
-      ) {
+      if (!this.options.sampleWhenIdle && !this.options.recentAutomaticWork() && !confirming) {
         this.schedule()
         return
       }

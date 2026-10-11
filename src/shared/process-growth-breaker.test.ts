@@ -51,7 +51,8 @@ describe('evaluateProcessGrowth', () => {
     expect(evaluateProcessGrowth(state, sample(0, LIMITS.hostElevatedDescendants), LIMITS)).toEqual(
       {
         level: 'elevated',
-        trips: []
+        trips: [],
+        rising: false
       }
     )
   })
@@ -63,7 +64,8 @@ describe('evaluateProcessGrowth', () => {
     evaluateProcessGrowth(state, sample(10_000, 600), LIMITS)
     expect(evaluateProcessGrowth(state, sample(12_000, null), LIMITS)).toEqual({
       level: 'unknown',
-      trips: []
+      trips: [],
+      rising: true
     })
     expect(evaluateProcessGrowth(state, sample(15_000, 900), LIMITS).level).toBe('critical')
   })

@@ -44,6 +44,8 @@ export type ProcessGrowthState = {
 export type ProcessGrowthVerdict = {
   level: 'ok' | 'elevated' | 'critical' | 'unknown'
   trips: ProcessGrowthTrip[]
+  /** A rising streak is open somewhere; confirm it with short samples. */
+  rising: boolean
 }
 
 const HOST_KEY = ''
@@ -67,7 +69,7 @@ export function evaluateProcessGrowth(
   limits: ProcessGrowthLimits
 ): ProcessGrowthVerdict {
   if (sample.hostDescendants === null) {
-    return { level: 'unknown', trips: [] }
+    return { level: 'unknown', trips: [], rising: state.streaks.size > 0 }
   }
   const previous = state.previous
   const elapsedMs = previous ? sample.atMs - previous.atMs : 0
@@ -105,11 +107,12 @@ export function evaluateProcessGrowth(
   }
   state.previous = sample
   if (trips.length > 0) {
-    return { level: 'critical', trips }
+    return { level: 'critical', trips, rising: true }
   }
   return {
     level: growing || sample.hostDescendants >= limits.hostElevatedDescendants ? 'elevated' : 'ok',
-    trips
+    trips,
+    rising: growing
   }
 }
 
