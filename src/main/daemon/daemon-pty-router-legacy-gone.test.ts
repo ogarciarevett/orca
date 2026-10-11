@@ -3,6 +3,7 @@ import type { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
 
 function adapter(label: string, sessions: string[] = []): DaemonPtyAdapter {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the router only calls these members on this path.
   return {
     listProcesses: vi.fn(async () => sessions.map((id) => ({ id, cwd: '', title: label }))),
     disconnectOnly: vi.fn(async () => {}),

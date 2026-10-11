@@ -327,7 +327,7 @@ export class DaemonPtyRouter implements IPtyProvider {
     return this.current
   }
 
-  // Why by reference: Manage Sessions and the restart swap read these by identity; a gone legacy socket is spliced out in place, so holders see the drop.
+  // Why by reference: callers read these by identity. A gone legacy socket is spliced out in place; snapshot holders (the restart swap) re-check on their next list.
   getLegacyAdapters(): readonly DaemonPtyAdapter[] {
     return this.legacy
   }
