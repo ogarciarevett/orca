@@ -11,48 +11,47 @@ function sample(atMs: number, host: number | null, scopes: Record<string, number
 }
 
 describe('evaluateProcessGrowth', () => {
-  it('trips on one agent forking 40+/s for 10 s and names that agent', () => {
+  it('trips only after three rising samples over 10 s, and names the agent that grew', () => {
     const state = createProcessGrowthState()
+    const levels: string[] = []
     let verdict = evaluateProcessGrowth(state, sample(0, 10, { a: 5, b: 5 }), LIMITS)
-    expect(verdict.level).toBe('ok')
-    for (let t = 5_000; t <= 10_000; t += 5_000) {
+    for (let step = 1; step <= 3; step++) {
+      const t = step * 5_000
       verdict = evaluateProcessGrowth(
         state,
-        sample(t, 10 + t / 20, { a: 5 + t / 20, b: 5 }),
+        sample(t, 10 + step * 250, { a: 5 + step * 250, b: 5 }),
         LIMITS
       )
+      levels.push(verdict.level)
     }
-    expect(verdict.level).toBe('critical')
+    expect(levels).toEqual(['elevated', 'elevated', 'critical'])
     expect(verdict.trips).toEqual(
-      expect.arrayContaining([
-        { scopeId: 'a', descendants: 505, growthPerSecond: 50, cause: 'growth' },
-        expect.objectContaining({ scopeId: null, cause: 'growth' })
-      ])
+      expect.arrayContaining([{ scopeId: 'a', descendants: 755, growthPerSecond: 50 }])
     )
     expect(verdict.trips.some((trip) => trip.scopeId === 'b')).toBe(false)
   })
 
-  it('reports a short burst as elevated, and resets the streak once growth stops', () => {
+  it('never trips on one long interval, however large the jump', () => {
     const state = createProcessGrowthState()
     evaluateProcessGrowth(state, sample(0, 0), LIMITS)
-    expect(evaluateProcessGrowth(state, sample(5_000, 300), LIMITS).level).toBe('elevated')
-    expect(evaluateProcessGrowth(state, sample(10_000, 300), LIMITS).level).toBe('ok')
-    expect(evaluateProcessGrowth(state, sample(15_000, 600), LIMITS).level).toBe('elevated')
+    expect(evaluateProcessGrowth(state, sample(30_000, 1_200), LIMITS).level).toBe('elevated')
   })
 
-  it('trips on the total descendant count regardless of growth', () => {
+  it('resets the streak once growth stops', () => {
     const state = createProcessGrowthState()
-    expect(evaluateProcessGrowth(state, sample(0, LIMITS.hostCriticalDescendants), LIMITS)).toEqual(
+    evaluateProcessGrowth(state, sample(0, 0), LIMITS)
+    evaluateProcessGrowth(state, sample(5_000, 300), LIMITS)
+    evaluateProcessGrowth(state, sample(10_000, 600), LIMITS)
+    expect(evaluateProcessGrowth(state, sample(15_000, 600), LIMITS).level).toBe('ok')
+    expect(evaluateProcessGrowth(state, sample(20_000, 900), LIMITS).level).toBe('elevated')
+  })
+
+  it('reports a high total as elevated load, never as a trip', () => {
+    const state = createProcessGrowthState()
+    expect(evaluateProcessGrowth(state, sample(0, LIMITS.hostElevatedDescendants), LIMITS)).toEqual(
       {
-        level: 'critical',
-        trips: [
-          {
-            scopeId: null,
-            descendants: LIMITS.hostCriticalDescendants,
-            growthPerSecond: 0,
-            cause: 'count'
-          }
-        ]
+        level: 'elevated',
+        trips: []
       }
     )
   })
@@ -61,11 +60,12 @@ describe('evaluateProcessGrowth', () => {
     const state = createProcessGrowthState()
     evaluateProcessGrowth(state, sample(0, 0), LIMITS)
     evaluateProcessGrowth(state, sample(5_000, 300), LIMITS)
-    expect(evaluateProcessGrowth(state, sample(7_000, null), LIMITS)).toEqual({
+    evaluateProcessGrowth(state, sample(10_000, 600), LIMITS)
+    expect(evaluateProcessGrowth(state, sample(12_000, null), LIMITS)).toEqual({
       level: 'unknown',
       trips: []
     })
-    expect(evaluateProcessGrowth(state, sample(10_000, 600), LIMITS).level).toBe('critical')
+    expect(evaluateProcessGrowth(state, sample(15_000, 900), LIMITS).level).toBe('critical')
   })
 })
 

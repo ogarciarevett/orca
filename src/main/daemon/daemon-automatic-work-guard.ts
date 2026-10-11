@@ -1,4 +1,4 @@
-import type { HostPressureLevel } from '../../shared/host-spawn-admission'
+import type { AutomaticWorkMode, HostPressureLevel } from '../../shared/host-spawn-admission'
 import type { ProcessGrowthTrip } from '../../shared/process-growth-breaker'
 import { AutomaticWorkRunMarker } from './automatic-work-run-marker-store'
 import { DaemonProcessGrowthMonitor } from './daemon-process-growth-monitor'
@@ -22,6 +22,7 @@ export class DaemonAutomaticWorkGuard {
   readonly gate: TerminalSpawnGate
   private readonly marker: AutomaticWorkRunMarker
   private readonly monitor: DaemonProcessGrowthMonitor
+  private pressurePausedSince: number | null = null
 
   constructor(private readonly options: DaemonAutomaticWorkGuardOptions) {
     this.marker = new AutomaticWorkRunMarker(options.markerPath, options.log, options.ownsEndpoint)
@@ -38,7 +39,8 @@ export class DaemonAutomaticWorkGuard {
       log: (event, details) => options.log.log(event, details),
       mode: options.mode,
       pressure: () => this.monitor.level,
-      ...this.marker.gateOptions()
+      automaticWorkMode: () => this.automaticWorkMode(),
+      armAutomaticWork: () => this.marker.arm()
     })
   }
 
@@ -65,16 +67,26 @@ export class DaemonAutomaticWorkGuard {
     this.gate.onPressureChanged()
   }
 
+  private automaticWorkMode(): AutomaticWorkMode {
+    const recorded = this.marker.mode
+    if (recorded.kind === 'paused' || this.pressurePausedSince === null) {
+      return recorded
+    }
+    return { kind: 'paused', reason: 'pressure', since: this.pressurePausedSince }
+  }
+
   private onTrip(trips: readonly ProcessGrowthTrip[]): void {
-    // Why pause, not kill: running agents keep running; only new automatic work stops,
-    // and it stays stopped until someone resumes it (owner decision Q3).
-    this.marker.pause('pressure')
+    // Why pause, not kill: running agents keep running and only new automatic work stops
+    // (owner decision Q3). Why in memory for this run: nothing can resume a recorded pause
+    // yet, and an observe-only host must not leave one behind for when it starts enforcing.
+    if (this.options.mode === 'enforce') {
+      this.pressurePausedSince ??= Date.now()
+    }
     this.options.log.log('process-growth-breaker-tripped', {
       trips: trips.map((trip) => ({
         scope: trip.scopeId === null ? 'host' : trip.scopeId.slice(-12),
         descendants: trip.descendants,
-        growthPerSecond: trip.growthPerSecond,
-        cause: trip.cause
+        growthPerSecond: trip.growthPerSecond
       }))
     })
   }

@@ -10,17 +10,20 @@ export type ProcessGrowthSample = {
 }
 
 export type ProcessGrowthLimits = {
-  hostCriticalDescendants: number
+  /** A total this high is reported as elevated load; on its own it never trips. */
+  hostElevatedDescendants: number
   /** New descendants per second, per scope or host-wide, that count as a storm. */
   growthPerSecond: number
-  /** How long the growth rate must hold before it trips. */
+  /** How long, and over how many consecutive rising samples, growth must hold to trip. */
   sustainMs: number
+  minRisingSamples: number
 }
 
 export const DEFAULT_PROCESS_GROWTH_LIMITS: ProcessGrowthLimits = {
-  hostCriticalDescendants: 1500,
+  hostElevatedDescendants: 1500,
   growthPerSecond: 40,
-  sustainMs: 10_000
+  sustainMs: 10_000,
+  minRisingSamples: 3
 }
 
 export type ProcessGrowthTrip = {
@@ -28,13 +31,14 @@ export type ProcessGrowthTrip = {
   scopeId: string | null
   descendants: number
   growthPerSecond: number
-  cause: 'count' | 'growth'
 }
+
+type RisingStreak = { since: number; samples: number }
 
 export type ProcessGrowthState = {
   previous: ProcessGrowthSample | null
-  /** When each scope (`''` = host) first exceeded the growth rate in the current streak. */
-  growingSince: Map<string, number>
+  /** Current rising streak per scope (`''` = host). */
+  streaks: Map<string, RisingStreak>
 }
 
 export type ProcessGrowthVerdict = {
@@ -45,14 +49,18 @@ export type ProcessGrowthVerdict = {
 const HOST_KEY = ''
 
 export function createProcessGrowthState(): ProcessGrowthState {
-  return { previous: null, growingSince: new Map() }
+  return { previous: null, streaks: new Map() }
 }
 
 function growthRate(previous: number | undefined, current: number, elapsedMs: number): number {
   return previous === undefined || elapsedMs <= 0 ? 0 : ((current - previous) * 1000) / elapsedMs
 }
 
-/** Folds one sample into the state. `unknown` never trips and never clears a streak. */
+/**
+ * Folds one sample into the state. Only sustained growth trips: a high total is load,
+ * not a storm, and one long sampling interval is never enough evidence on its own.
+ * `unknown` never trips and never clears a streak.
+ */
 export function evaluateProcessGrowth(
   state: ProcessGrowthState,
   sample: ProcessGrowthSample,
@@ -68,18 +76,21 @@ export function evaluateProcessGrowth(
   const observe = (key: string, before: number | undefined, current: number): void => {
     const rate = growthRate(before, current, elapsedMs)
     if (rate < limits.growthPerSecond) {
-      state.growingSince.delete(key)
+      state.streaks.delete(key)
       return
     }
     growing = true
-    const since = state.growingSince.get(key) ?? previous?.atMs ?? sample.atMs
-    state.growingSince.set(key, since)
-    if (sample.atMs - since >= limits.sustainMs) {
+    const streak = state.streaks.get(key) ?? { since: previous?.atMs ?? sample.atMs, samples: 0 }
+    streak.samples += 1
+    state.streaks.set(key, streak)
+    if (
+      streak.samples >= limits.minRisingSamples &&
+      sample.atMs - streak.since >= limits.sustainMs
+    ) {
       trips.push({
         scopeId: key === HOST_KEY ? null : key,
         descendants: current,
-        growthPerSecond: Math.round(rate),
-        cause: 'growth'
+        growthPerSecond: Math.round(rate)
       })
     }
   }
@@ -87,23 +98,19 @@ export function evaluateProcessGrowth(
   for (const [scopeId, count] of sample.scopes) {
     observe(scopeId, previous?.scopes.get(scopeId), count)
   }
-  for (const key of state.growingSince.keys()) {
+  for (const key of state.streaks.keys()) {
     if (key !== HOST_KEY && !sample.scopes.has(key)) {
-      state.growingSince.delete(key)
+      state.streaks.delete(key)
     }
   }
-  if (sample.hostDescendants >= limits.hostCriticalDescendants) {
-    trips.push({
-      scopeId: null,
-      descendants: sample.hostDescendants,
-      growthPerSecond: Math.round(
-        growthRate(previous?.hostDescendants ?? undefined, sample.hostDescendants, elapsedMs)
-      ),
-      cause: 'count'
-    })
-  }
   state.previous = sample
-  return { level: trips.length > 0 ? 'critical' : growing ? 'elevated' : 'ok', trips }
+  if (trips.length > 0) {
+    return { level: 'critical', trips }
+  }
+  return {
+    level: growing || sample.hostDescendants >= limits.hostElevatedDescendants ? 'elevated' : 'ok',
+    trips
+  }
 }
 
 /** Descendant counts per root pid from a pid/ppid table. */

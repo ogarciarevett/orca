@@ -129,12 +129,21 @@ export class DaemonProcessGrowthMonitor {
     if (this.stopped) {
       return
     }
-    const delayMs = this.options.recentAutomaticWork()
-      ? ACTIVE_SAMPLE_INTERVAL_MS
-      : IDLE_SAMPLE_INTERVAL_MS
+    // Why elevated samples fast: a rising tree is confirmed over several short samples,
+    // never tripped on one long idle interval.
+    const delayMs =
+      this.options.recentAutomaticWork() ||
+      this.currentLevel === 'elevated' ||
+      this.currentLevel === 'critical'
+        ? ACTIVE_SAMPLE_INTERVAL_MS
+        : IDLE_SAMPLE_INTERVAL_MS
     this.timer = setTimeout(() => {
       this.timer = null
-      if (!this.options.sampleWhenIdle && !this.options.recentAutomaticWork()) {
+      if (
+        !this.options.sampleWhenIdle &&
+        !this.options.recentAutomaticWork() &&
+        this.currentLevel !== 'elevated'
+      ) {
         this.schedule()
         return
       }
