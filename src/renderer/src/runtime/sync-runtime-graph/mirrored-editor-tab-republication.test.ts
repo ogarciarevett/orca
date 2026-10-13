@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeState as makePublicationState } from '../sync-runtime-graph-test-harness'
-import { applyWebSessionTabsSnapshot } from '../web-session-tabs-sync'
+import { applyWebSessionTabsSnapshot } from '../web-session-tabs-sync/snapshot-api'
 import { buildOwnedEditorFileId } from '../../store/slices/editor/file-ids/editor-file-ids'
 import {
   ENV,

@@ -3,7 +3,7 @@ import { parseWorkspaceSessionSalvaging } from '../../../../shared/workspace-ses
 import { buildEditorSessionData } from '../../lib/workspace-session'
 import { createTestStore, makeWorktree } from '../../store/slices/store-test-helpers'
 import { createStoreSessionMockApi } from '../../store/slices/store-session-test-harness'
-import { applyWebSessionTabsSnapshot } from '../web-session-tabs-sync'
+import { applyWebSessionTabsSnapshot } from '../web-session-tabs-sync/snapshot-api'
 import {
   ENV,
   NOW,
