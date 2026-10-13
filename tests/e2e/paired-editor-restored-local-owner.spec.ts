@@ -115,7 +115,19 @@ test('closing a restored local sibling reads its workspace owner while a paired 
     const error = client.page.getByText("The host couldn't find this file's workspace", {
       exact: false
     })
+    const focusedHostReadCode = await client.page.evaluate(
+      async ({ environmentId, worktreeId, relativePath }) => {
+        const response = await window.api.runtimeEnvironments.call({
+          selector: environmentId,
+          method: 'files.read',
+          params: { worktree: `id:${worktreeId}`, relativePath }
+        })
+        return response.ok ? 'ok' : response.error.code
+      },
+      { environmentId: client.environmentId, worktreeId, relativePath: oldName }
+    )
     const record = {
+      focusedHostReadCode,
       closedTabCount: await client.page
         .locator('[data-tab-id]')
         .filter({ hasText: activeName })
